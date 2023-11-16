@@ -1,5 +1,6 @@
 import requests
 import bs4
+import pandas
 
 # from selenium import webdriver
 # from selenium.webdriver.common.by import By
@@ -26,10 +27,18 @@ def parse_metro_categories(category_link):
             product_id = product['data-sku']
             name = product.find('span', 'product-card-name__text').text.strip()
             link = 'https://online.metro-cc.ru' + product.find('a', 'product-card-photo__link')['href']
-            regular_price = product.find('span', 'product-unit-prices__actual').find('span', 'product-price__sum-rubles').text.strip()
-            promo_price_element = (product.find('span', 'product-unit-prices__old-wrapper'))
+
+            regular_price_element = product.find('div', 'product-unit-prices__old-wrapper')
+            if regular_price_element:
+                regular_price = regular_price_element.find('span', 'product-price__sum-rubles')
+                regular_price = regular_price.text.strip().replace("&nbsp;", "") if regular_price else None
+            else:
+                regular_price = None
+
+            promo_price_element = product.find('div', 'product-unit-prices__actual-wrapper')
             if promo_price_element:
-                promo_price = promo_price_element.find('span', 'product-price__sum-rubles').text.strip()
+                promo_price = promo_price_element.find('span', 'product-price__sum-rubles')
+                promo_price = promo_price.text.strip() if promo_price else None
             else:
                 promo_price = None
             # brand = product.find('span', '').text.strip()
@@ -42,8 +51,12 @@ def parse_metro_categories(category_link):
                 'promo_price': promo_price,
                 # 'brand': brand
             })
+
         print(data_list)
         print(len(products))
+        df = pandas.DataFrame(data_list)
+        df.to_excel('coffee_metro.xlsx', index=False)
+        return data_list
 
 
 parse_metro_categories(link_to_coffee)
