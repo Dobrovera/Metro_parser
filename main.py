@@ -1,6 +1,7 @@
 import requests
 import bs4
 import pandas
+import datetime
 
 
 link_to_coffee = 'https://online.metro-cc.ru/category/chaj-kofe-kakao/kofe?from=under_search&in_stock=1'
@@ -12,63 +13,94 @@ def parse_metro_categories(category_link):
     page_number = 1
     data_list = []
 
-    while True:
-        current_page_url = f"{category_link}&page={page_number}"
-        request = requests.get(current_page_url)
+    # Используем менеджер сеансов для повторного использования соединения
+    with requests.Session() as session:
+        while True:
+            # Формируем URL текущей страницы
+            current_page_url = f"{category_link}&page={page_number}"
 
-        if request.status_code != 200:
-            break
+            # Отправляем GET-запрос к текущей странице
+            request = session.get(current_page_url)
 
-        soup = bs4.BeautifulSoup(request.text, 'html.parser')
-        products = soup.find_all('div', product_class)
+            # Проверяем успешность запроса
+            if request.status_code != 200:
+                break
 
-        if not products:
-            break
+            # Создаем объект BeautifulSoup для парсинга HTML текущей страницы
+            soup = bs4.BeautifulSoup(request.text, 'html.parser')
 
-        for product in products:
-            product_id = product['data-sku']
-            name = product.find('span', 'product-card-name__text').text.strip()
-            link = 'https://online.metro-cc.ru' + product.find('a', 'product-card-photo__link')['href']
+            # Находим все продукты на текущей странице
+            products = soup.find_all('div', product_class)
 
-            link_request = requests.get(link)
-            if link_request.status_code == 200:
-                link_soup = bs4.BeautifulSoup(link_request.text, 'html.parser')
-                brand_elem = link_soup.find('meta', {'itemprop': 'brand'})
-                brand = brand_elem.get('content') if brand_elem else None
+            # Проверяем, есть ли продукты на текущей странице
+            if not products:
+                break
 
-            regular_price_element = product.find('div', 'product-unit-prices__old-wrapper')
-            if regular_price_element:
-                regular_price = regular_price_element.find('span', 'product-price__sum-rubles')
-                regular_price = regular_price.text.strip().replace("&nbsp;", "") if regular_price else None
-            else:
-                regular_price = None
+            # Итерируемся по каждому продукту на текущей странице
+            for product in products:
+                product_id = product['data-sku']
+                name = product.find('span', 'product-card-name__text').text.strip()
+                link = 'https://online.metro-cc.ru' + product.find('a', 'product-card-photo__link')['href']
 
-            promo_price_element = product.find('div', 'product-unit-prices__actual-wrapper')
-            if promo_price_element:
-                promo_price = promo_price_element.find('span', 'product-price__sum-rubles')
-                promo_price = promo_price.text.strip() if promo_price else None
-            else:
-                promo_price = None
+                # Отправляем GET-запрос к странице продукта
+                link_request = session.get(link)
 
-            data_list.append({
-                'id': product_id,
-                'name': name,
-                'link': link,
-                'regular_price': regular_price,
-                'promo_price': promo_price,
-                'brand': brand
-            })
+                # Проверяем успешность запроса
+                if link_request.status_code == 200:
+                    # Создаем объект BeautifulSoup для парсинга HTML страницы продукта
+                    link_soup = bs4.BeautifulSoup(link_request.text, 'html.parser')
 
-        page_number += 1
+                    # Извлекаем информацию о бренде продукта
+                    brand_elem = link_soup.find('meta', {'itemprop': 'brand'})
+                    brand = brand_elem.get('content') if brand_elem else None
 
-        show_more_button = soup.find('button', {'class': show_more_button_class})
-        if not show_more_button:
-            print("No 'Show More' button found. Exiting.")
-            break
+                # Извлекаем информацию о цене продукта
+                regular_price_element = product.find('div', 'product-unit-prices__old-wrapper')
+                if regular_price_element:
+                    regular_price = regular_price_element.find('span', 'product-price__sum-rubles')
+                    regular_price = regular_price.text.strip().replace("&nbsp;", "") if regular_price else None
+                else:
+                    regular_price = None
 
+                # Извлекаем информацию о промо-цене продукта
+                promo_price_element = product.find('div', 'product-unit-prices__actual-wrapper')
+                if promo_price_element:
+                    promo_price = promo_price_element.find('span', 'product-price__sum-rubles')
+                    promo_price = promo_price.text.strip() if promo_price else None
+                else:
+                    promo_price = None
+
+                # Добавляем информацию о продукте в список
+                data_list.append({
+                    'id': product_id,
+                    'name': name,
+                    'link': link,
+                    'regular_price': regular_price,
+                    'promo_price': promo_price,
+                    'brand': brand
+                })
+                # Выводим последний добавленный продукт и общее количество продуктов (для отладки)
+                print(data_list[-1])
+                print(len(data_list))
+
+            # Увеличиваем номер страницы для следующего запроса
+            page_number += 1
+
+            # Проверяем наличие кнопки "Показать еще"
+            show_more_button = soup.find('button', {'class': show_more_button_class})
+            if not show_more_button:
+                print("No 'Show More' button found. Exiting.")
+                break
+
+    # Создаем DataFrame из списка продуктов и сохраняем в Excel-файл
     df = pandas.DataFrame(data_list)
     df.to_excel('coffee_metro.xlsx', index=False)
     return data_list
 
 
-parse_metro_categories(link_to_coffee)
+if __name__ == "__main__":
+    # Замеряем время выполнения
+    start_time = datetime.datetime.now()
+    parse_metro_categories(link_to_coffee)
+    end_time = datetime.datetime.now()
+    print(f'Время выполнения: {end_time-start_time}')
