@@ -1,2 +1,5 @@
 /venv
 .idea
+.python-version
+*.db
+__pycache__/*
