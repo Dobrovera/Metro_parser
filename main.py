@@ -94,7 +94,6 @@ async def main():
                 current_page_url = f'{category_link}&page={page_number}'
                 print(f'Парсим страницу {page_number}.')
 
-                # async with throttler:
                 # Отправляем GET-запрос к текущей странице
                 async with session.get(current_page_url) as response:
 
@@ -119,7 +118,6 @@ async def main():
 
                 # Инкрементируем счетчик
                 page_number += 1
-                # break
 
             await asyncio.gather(*tasks)
 
